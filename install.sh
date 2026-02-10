@@ -8,33 +8,90 @@ TMP_DIR="$(mktemp -d)"
 SKILL_DIR="commands"
 
 cleanup() {
+    printf '\e[?25h' > /dev/tty 2>/dev/null || true
     rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
 
-echo "=== OSA Claude Code Skills — Installer ==="
+echo "[osa.xyz] OSA Claude Code Skills — Installer"
 echo ""
 
 # ------------------------------------
-# 1. インストール先の選択
+# 1. インストール先の選択 (矢印キー対応)
 # ------------------------------------
-echo "インストール先を選択してください:"
-echo "  1) このリポジトリ直下 (.claude/commands/)"
-echo "  2) ユーザーホーム (~/.claude/commands/)"
+select_option() {
+    local options=("$@")
+    local count=${#options[@]}
+    local selected=0
+
+    # カーソルを非表示
+    printf '\e[?25l' > /dev/tty
+
+    # 選択肢を描画
+    draw_menu() {
+        local i
+        for ((i = 0; i < count; i++)); do
+            if [ $i -eq $selected ]; then
+                printf '\r\e[K  \e[1;36m❯ %s\e[0m\n' "${options[$i]}" > /dev/tty
+            else
+                printf '\r\e[K    %s\n' "${options[$i]}" > /dev/tty
+            fi
+        done
+    }
+
+    # 初回描画
+    draw_menu
+
+    # キー入力ループ
+    while true; do
+        read -rsn1 key < /dev/tty
+        case "$key" in
+            $'\x1b')  # エスケープシーケンス (矢印キー)
+                read -rsn2 rest < /dev/tty
+                case "$rest" in
+                    '[A')  # ↑
+                        ((selected > 0)) && ((selected--))
+                        ;;
+                    '[B')  # ↓
+                        ((selected < count - 1)) && ((selected++))
+                        ;;
+                esac
+                ;;
+            'k')  # vim: 上
+                ((selected > 0)) && ((selected--))
+                ;;
+            'j')  # vim: 下
+                ((selected < count - 1)) && ((selected++))
+                ;;
+            '')  # Enter
+                break
+                ;;
+        esac
+        # メニューを再描画 (カーソルを上に戻す)
+        printf '\e[%dA' "$count" > /dev/tty
+        draw_menu
+    done
+
+    # カーソルを再表示
+    printf '\e[?25h' > /dev/tty
+
+    return $selected
+}
+
+echo "インストール先を選択してください (↑↓/jk で移動, Enter で決定):"
 echo ""
-printf "選択 [1/2]: "
-read -r choice
+
+select_option \
+    "このリポジトリ直下 (.claude/commands/)" \
+    "ユーザーホーム (~/.claude/commands/)"
+choice=$?
 
 case "${choice}" in
-    1)
+    0)
         INSTALL_DIR="$(pwd)/.claude/commands"
         ;;
-    2)
+    1)
         INSTALL_DIR="${HOME}/.claude/commands"
-        ;;
-    *)
-        echo "エラー: 1 または 2 を入力してください"
-        exit 1
         ;;
 esac
 
@@ -97,4 +154,4 @@ if [ -f "${REMOTE_VERSION_FILE}" ]; then
 fi
 
 echo ""
-echo "=== インストール完了 (${remote_version}) ==="
+echo "[osa.xyz] インストール完了 (${remote_version})"
